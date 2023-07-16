@@ -7,6 +7,9 @@ from interbotix_xs_modules.arm import InterbotixManipulatorXS
 from interbotix_xs_msgs.msg import JointSingleCommand
 from constants import MASTER2PUPPET_JOINT_FN, DT, START_ARM_POSE, MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE
 from robot_utils import torque_on, torque_off, move_arms, move_grippers, get_arm_gripper_positions
+import rospy
+from interbotix_xs_msgs.srv import RegisterValues
+
 
 def prep_robots(master_bot, puppet_bot):
     # reboot gripper motors, and set operating modes for all motors
@@ -16,6 +19,11 @@ def prep_robots(master_bot, puppet_bot):
     master_bot.dxl.robot_set_operating_modes("group", "arm", "position")
     master_bot.dxl.robot_set_operating_modes("single", "gripper", "position")
     # puppet_bot.dxl.robot_set_motor_registers("single", "gripper", 'current_limit', 1000) # TODO(tonyzhaozh) figure out how to set this limit
+    # puppet_bot.gripper.core.srv_set_reg("single", "gripper", "Goal_Current", 300)
+    # torque_off(puppet_bot)
+    # print(puppet_bot.gripper.core.srv_get_reg("single", "gripper", "Current_Limit", 600))
+    # puppet_bot.gripper.core.srv_set_reg("single", "gripper", "Current_Limit", 300)
+    # print(puppet_bot.gripper.core.srv_get_reg("single", "gripper", "Current_Limit", 600))
     torque_on(puppet_bot)
     torque_on(master_bot)
 
@@ -46,6 +54,7 @@ def teleop(robot_side):
     """ A standalone function for experimenting with teleoperation. No data recording. """
     puppet_bot = InterbotixManipulatorXS(robot_model="vx300s", group_name="arm", gripper_name="gripper", robot_name=f'puppet_{robot_side}', init_node=True)
     master_bot = InterbotixManipulatorXS(robot_model="wx250s", group_name="arm", gripper_name="gripper", robot_name=f'master_{robot_side}', init_node=False)
+    # puppet_bot.gripper.core.srv_get_reg = rospy.ServiceProxy(f'/puppet_{robot_side}/get_motor_registers', RegisterValues)
 
     prep_robots(master_bot, puppet_bot)
     press_to_start(master_bot)
@@ -55,11 +64,16 @@ def teleop(robot_side):
     while True:
         # sync joint positions
         master_state_joints = master_bot.dxl.joint_states.position[:6]
+        # print(master_bot.dxl.joint_states.position[:6])
         puppet_bot.arm.set_joint_positions(master_state_joints, blocking=False)
         # sync gripper positions
         master_gripper_joint = master_bot.dxl.joint_states.position[6]
         puppet_gripper_joint_target = MASTER2PUPPET_JOINT_FN(master_gripper_joint)
         gripper_command.cmd = puppet_gripper_joint_target
+        # print(puppet_bot.gripper.core.srv_get_reg("single", "gripper", "Current_Limit", 600))
+        puppet_bot.gripper.core.srv_set_reg("single", "gripper", "Goal_Current", 300)
+        # puppet_bot.gripper.core.srv_set_reg("single", "gripper", "Current_Limit", 300)
+        # print(puppet_bot.gripper.core.srv_get_reg("single", "gripper", "Current_Limit", 300))
         puppet_bot.gripper.core.pub_single.publish(gripper_command)
         # sleep DT
         time.sleep(DT)

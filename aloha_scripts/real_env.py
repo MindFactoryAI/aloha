@@ -4,6 +4,7 @@ import collections
 import matplotlib.pyplot as plt
 import dm_env
 
+from aloha_scripts.constants import get_start_arm_pose
 from constants import DT, START_ARM_POSE, MASTER_GRIPPER_JOINT_NORMALIZE_FN, PUPPET_GRIPPER_JOINT_UNNORMALIZE_FN
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN, PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN
 from constants import PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
@@ -37,7 +38,7 @@ class RealEnv:
                                    "cam_right_wrist": (480x640x3)} # h, w, c, dtype='uint8'
     """
 
-    def __init__(self, init_node, setup_robots=True):
+    def __init__(self, init_node, setup_robots=True, start_arm_left_pose=None, start_arm_right_pose=None):
         self.puppet_bot_left = InterbotixManipulatorXS(robot_model="vx300s", group_name="arm", gripper_name="gripper",
                                                        robot_name=f'puppet_left', init_node=init_node)
         self.puppet_bot_right = InterbotixManipulatorXS(robot_model="vx300s", group_name="arm", gripper_name="gripper",
@@ -49,6 +50,8 @@ class RealEnv:
         self.recorder_right = Recorder('right', init_node=False)
         self.image_recorder = ImageRecorder(init_node=False)
         self.gripper_command = JointSingleCommand(name="gripper")
+        self.start_arm_left_pose = start_arm_left_pose if start_arm_left_pose is not None else START_ARM_POSE[:6]
+        self.start_arm_right_pose = start_arm_right_pose if start_arm_right_pose is not None else START_ARM_POSE[:6]
 
     def setup_robots(self):
         setup_puppet_bot(self.puppet_bot_left)
@@ -92,8 +95,7 @@ class RealEnv:
         self.puppet_bot_right.gripper.core.pub_single.publish(self.gripper_command)
 
     def _reset_joints(self):
-        reset_position = START_ARM_POSE[:6]
-        move_arms([self.puppet_bot_left, self.puppet_bot_right], [reset_position, reset_position], move_time=1)
+        move_arms([self.puppet_bot_left, self.puppet_bot_right], [self.start_arm_left_pose, self.start_arm_right_pose], move_time=1)
 
     def _reset_gripper(self):
         """Set to position mode and do position resets: first open then close. Then change back to PWM mode"""
@@ -105,7 +107,7 @@ class RealEnv:
         obs['qpos'] = self.get_qpos()
         obs['qvel'] = self.get_qvel()
         obs['effort'] = self.get_effort()
-        obs['images'] = self.get_images()
+        obs['images'], obs['images_compressed'] = self.get_images()
         return obs
 
     def get_reward(self):
@@ -151,8 +153,9 @@ def get_action(master_bot_left, master_bot_right):
     return action
 
 
-def make_real_env(init_node, setup_robots=True):
-    env = RealEnv(init_node, setup_robots)
+def make_real_env(init_node, setup_robots=True, task=None):
+    start_left_arm_pose, start_right_arm_pose = get_start_arm_pose(task)
+    env = RealEnv(init_node, setup_robots, start_left_arm_pose, start_right_arm_pose)
     return env
 
 

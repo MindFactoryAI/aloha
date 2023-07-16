@@ -3,15 +3,26 @@ import numpy as np
 import cv2
 import h5py
 import argparse
+from pathlib import Path
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 from constants import DT
+import cv2
+from PIL import Image
 
 import IPython
 e = IPython.embed
 
 JOINT_NAMES = ["waist", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate"]
 STATE_NAMES = JOINT_NAMES + ["gripper"]
+
+
+def decompress_image(image_bytes):
+    image = np.frombuffer(image_bytes, np.uint8)
+    image_bgr = cv2.imdecode(image, cv2.IMREAD_COLOR)
+    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+
 
 def load_hdf5(dataset_dir, dataset_name):
     dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
@@ -20,6 +31,7 @@ def load_hdf5(dataset_dir, dataset_name):
         exit()
 
     with h5py.File(dataset_path, 'r') as root:
+        timesteps = root.attrs['episode_len']
         is_sim = root.attrs['sim']
         qpos = root['/observations/qpos'][()]
         qvel = root['/observations/qvel'][()]
@@ -27,20 +39,42 @@ def load_hdf5(dataset_dir, dataset_name):
         action = root['/action'][()]
         image_dict = dict()
         for cam_name in root[f'/observations/images/'].keys():
-            image_dict[cam_name] = root[f'/observations/images/{cam_name}'][()]
+            images = []
+            for i in range(timesteps):
+                image_bytes = root[f'/observations/images/{cam_name}/{i}.jpg'][()]
+                image_rgb = decompress_image(image_bytes)
+                images.append(image_rgb)
+            image_dict[cam_name] = images
 
     return qpos, qvel, effort, action, image_dict
+
 
 def main(args):
     dataset_dir = args['dataset_dir']
     episode_idx = args['episode_idx']
     dataset_name = f'episode_{episode_idx}'
 
-    qpos, qvel, effort, action, image_dict = load_hdf5(dataset_dir, dataset_name)
-    save_videos(image_dict, DT, video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4'))
-    visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
-    visualize_single(effort, 'effort', plot_path=os.path.join(dataset_dir, dataset_name + '_effort.png'))
-    visualize_single(action - qpos, 'tracking_error', plot_path=os.path.join(dataset_dir, dataset_name + '_error.png'))
+    episodes = Path(dataset_dir).glob('*.hdf5')
+    episodes = list(episodes)
+
+    for episode in tqdm(episodes):
+        dataset_name = episode.stem
+        if args['first_frame']:
+            dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
+            with h5py.File(dataset_path, 'r') as root:
+                jpegs = [decompress_image(root[f'/observations/images/{cam_name}/{0}.jpg'][()]) for cam_name in root[f'/observations/images/'].keys()]
+                panel = np.concatenate(jpegs, axis=1)
+                Image.fromarray(panel).save(f'{episode.parent}/{episode.stem}.jpg')
+            continue
+
+        if (Path(dataset_dir)/Path(episode.stem + '_video.mp4')).exists():
+            print(f'already done {str(episode)}')
+        else:
+            qpos, qvel, effort, action, image_dict = load_hdf5(dataset_dir, dataset_name)
+            save_videos(image_dict, DT, video_path=os.path.join(dataset_dir, dataset_name + '_video.mp4'))
+            visualize_joints(qpos, action, plot_path=os.path.join(dataset_dir, dataset_name + '_qpos.png'))
+            visualize_single(effort, 'effort', plot_path=os.path.join(dataset_dir, dataset_name + '_effort.png'))
+            visualize_single(action - qpos, 'tracking_error', plot_path=os.path.join(dataset_dir, dataset_name + '_error.png'))
     # visualize_timestamp(t_list, dataset_path) # TODO addn timestamp back
 
 
@@ -116,6 +150,7 @@ def visualize_joints(qpos_list, command_list, plot_path=None, ylim=None, label_o
     print(f'Saved qpos plot to: {plot_path}')
     plt.close()
 
+
 def visualize_single(efforts_list, label, plot_path=None, ylim=None, label_overwrite=None):
     efforts = np.array(efforts_list) # ts, dim
     num_ts, num_dim = efforts.shape
@@ -169,8 +204,10 @@ def visualize_timestamp(t_list, dataset_path):
     print(f'Saved timestamp plot to: {plot_path}')
     plt.close()
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_dir', action='store', type=str, help='Dataset dir.', required=True)
     parser.add_argument('--episode_idx', action='store', type=int, help='Episode index.', required=False)
+    parser.add_argument('--first-frame', action='store_true', default=False)
     main(vars(parser.parse_args()))

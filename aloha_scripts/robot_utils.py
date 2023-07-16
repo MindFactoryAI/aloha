@@ -6,18 +6,20 @@ from interbotix_xs_msgs.msg import JointSingleCommand
 import IPython
 e = IPython.embed
 
+
 class ImageRecorder:
     def __init__(self, init_node=True, is_debug=False):
         from collections import deque
         import rospy
         from cv_bridge import CvBridge
-        from sensor_msgs.msg import Image
+        from sensor_msgs.msg import CompressedImage
         self.is_debug = is_debug
         self.bridge = CvBridge()
         self.camera_names = ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
         if init_node:
             rospy.init_node('image_recorder', anonymous=True)
         for cam_name in self.camera_names:
+            setattr(self, f'{cam_name}_image_compressed', None)
             setattr(self, f'{cam_name}_image', None)
             setattr(self, f'{cam_name}_secs', None)
             setattr(self, f'{cam_name}_nsecs', None)
@@ -31,13 +33,14 @@ class ImageRecorder:
                 callback_func = self.image_cb_cam_right_wrist
             else:
                 raise NotImplementedError
-            rospy.Subscriber(f"/usb_{cam_name}/image_raw", Image, callback_func)
+            rospy.Subscriber(f"/usb_{cam_name}/image_raw/compressed", CompressedImage, callback_func)
             if self.is_debug:
                 setattr(self, f'{cam_name}_timestamps', deque(maxlen=50))
         time.sleep(0.5)
 
     def image_cb(self, cam_name, data):
-        setattr(self, f'{cam_name}_image', self.bridge.imgmsg_to_cv2(data, desired_encoding='passthrough'))
+        setattr(self, f'{cam_name}_image_compressed', np.frombuffer(data.data, np.uint8))
+        setattr(self, f'{cam_name}_image', self.bridge.compressed_imgmsg_to_cv2(data, desired_encoding='passthrough'))
         setattr(self, f'{cam_name}_secs', data.header.stamp.secs)
         setattr(self, f'{cam_name}_nsecs', data.header.stamp.nsecs)
         # cv2.imwrite('/home/tonyzhao/Desktop/sample.jpg', cv_image)
@@ -62,9 +65,11 @@ class ImageRecorder:
 
     def get_images(self):
         image_dict = dict()
+        image_dict_compressed = dict()
         for cam_name in self.camera_names:
             image_dict[cam_name] = getattr(self, f'{cam_name}_image')
-        return image_dict
+            image_dict_compressed[cam_name] = getattr(self, f'{cam_name}_image_compressed')
+        return image_dict, image_dict_compressed
 
     def print_diagnostics(self):
         def dt_helper(l):
@@ -75,6 +80,7 @@ class ImageRecorder:
             image_freq = 1 / dt_helper(getattr(self, f'{cam_name}_timestamps'))
             print(f'{cam_name} {image_freq=:.2f}')
         print()
+
 
 class Recorder:
     def __init__(self, side, init_node=True, is_debug=False):
@@ -132,12 +138,15 @@ class Recorder:
 
         print(f'{joint_freq=:.2f}\n{arm_command_freq=:.2f}\n{gripper_command_freq=:.2f}\n')
 
+
 def get_arm_joint_positions(bot):
     return bot.arm.core.joint_states.position[:6]
+
 
 def get_arm_gripper_positions(bot):
     joint_position = bot.gripper.core.joint_states.position[6]
     return joint_position
+
 
 def move_arms(bot_list, target_pose_list, move_time=1):
     num_steps = int(move_time / DT)
@@ -147,6 +156,7 @@ def move_arms(bot_list, target_pose_list, move_time=1):
         for bot_id, bot in enumerate(bot_list):
             bot.arm.set_joint_positions(traj_list[bot_id][t], blocking=False)
         time.sleep(DT)
+
 
 def move_grippers(bot_list, target_pose_list, move_time):
     gripper_command = JointSingleCommand(name="gripper")
@@ -159,20 +169,24 @@ def move_grippers(bot_list, target_pose_list, move_time):
             bot.gripper.core.pub_single.publish(gripper_command)
         time.sleep(DT)
 
+
 def setup_puppet_bot(bot):
     bot.dxl.robot_reboot_motors("single", "gripper", True)
     bot.dxl.robot_set_operating_modes("group", "arm", "position")
     bot.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
     torque_on(bot)
 
+
 def setup_master_bot(bot):
     bot.dxl.robot_set_operating_modes("group", "arm", "pwm")
     bot.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
     torque_off(bot)
 
+
 def set_standard_pid_gains(bot):
     bot.dxl.robot_set_motor_registers("group", "arm", 'Position_P_Gain', 800)
     bot.dxl.robot_set_motor_registers("group", "arm", 'Position_I_Gain', 0)
+
 
 def set_low_pid_gains(bot):
     bot.dxl.robot_set_motor_registers("group", "arm", 'Position_P_Gain', 100)
@@ -185,3 +199,28 @@ def torque_off(bot):
 def torque_on(bot):
     bot.dxl.robot_torque_enable("group", "arm", True)
     bot.dxl.robot_torque_enable("single", "gripper", True)
+
+
+def reboot_grippers(puppet_bot_left, puppet_bot_right, current_limit=1000):
+
+    for bot in [puppet_bot_left, puppet_bot_right]:
+        bot.dxl.robot_reboot_motors("single", "gripper", True)
+        bot.dxl.robot_torque_enable("single", "gripper", False)
+        bot.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
+        bot.dxl.robot_set_motor_registers("single", "gripper", 'Current_Limit', current_limit)
+        bot.dxl.robot_torque_enable("single", "gripper", True)
+
+
+def reboot_arms(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, current_limit=1000):
+    """ Move all 4 robots to a pose where it is easy to start demonstration """
+
+    # reboot gripper motors, and set operating modes for all motors
+
+    reboot_grippers(puppet_bot_left, puppet_bot_right, current_limit)
+
+    for bot in [puppet_bot_left, puppet_bot_right]:
+        bot.dxl.robot_set_operating_modes("group", "arm", "position")
+
+    for bot in [master_bot_left, master_bot_right]:
+        bot.dxl.robot_set_operating_modes("group", "arm", "position")
+        bot.dxl.robot_set_operating_modes("single", "gripper", "position")

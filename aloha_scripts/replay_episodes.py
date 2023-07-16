@@ -10,16 +10,8 @@ e = IPython.embed
 
 STATE_NAMES = JOINT_NAMES + ["gripper", 'left_finger', 'right_finger']
 
-def main(args):
-    dataset_dir = args['dataset_dir']
-    episode_idx = args['episode_idx']
-    dataset_name = f'episode_{episode_idx}'
 
-    dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
-    if not os.path.isfile(dataset_path):
-        print(f'Dataset does not exist at \n{dataset_path}\n')
-        exit()
-
+def replay(dataset_path):
     with h5py.File(dataset_path, 'r') as root:
         actions = root['/action'][()]
 
@@ -30,6 +22,18 @@ def main(args):
 
     move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)  # open
 
+
+def main(args):
+    dataset_dir = args['dataset_dir']
+    episode_idx = args['episode_idx']
+    dataset_name = f'episode_{episode_idx}'
+
+    dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
+    if not os.path.isfile(dataset_path):
+        print(f'Dataset does not exist at \n{dataset_path}\n')
+        exit()
+
+    replay(dataset_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

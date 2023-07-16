@@ -11,9 +11,10 @@ def main():
     for bot in all_bots:
         torque_on(bot)
 
-    puppet_sleep_position = (0, -1.7, 1.55, 0.12, 0.65, 0)
+    puppet_sleep_position = (0, -1.7, 1.64, 0.12, 0.65, 0)
     master_sleep_position = (0, -1.1, 1.24, 0, -0.24, 0)
     move_arms(all_bots, [puppet_sleep_position] * 2, move_time=2)
+
 
 if __name__ == '__main__':
     main()
