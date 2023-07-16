@@ -6,11 +6,12 @@ import h5py_cache
 import numpy as np
 from tqdm import tqdm
 
-from constants import DT, START_ARM_POSE, TASK_CONFIGS, get_start_arm_pose
-from constants import MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE, PUPPET_GRIPPER_JOINT_OPEN
+from aloha_scripts.constants import DT, START_ARM_POSE, TASK_CONFIGS, get_start_arm_pose
+from aloha_scripts.constants import MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE, PUPPET_GRIPPER_JOINT_OPEN
 from robot_utils import Recorder, ImageRecorder, get_arm_gripper_positions
 from robot_utils import move_arms, torque_on, torque_off, move_grippers
 from real_env import make_real_env, get_action
+
 
 from interbotix_xs_modules.arm import InterbotixManipulatorXS
 
@@ -67,11 +68,9 @@ def capture_one_episode(dt, max_timesteps, camera_names, dataset_dir, dataset_na
         print(f'Dataset already exist at \n{dataset_path}\nHint: set overwrite to True.')
         exit()
 
-    # move all 4 robots to a starting pose where it is easy to start teleoperation, then wait till both gripper closed
-    opening_ceremony(master_bot_left, master_bot_right, env.puppet_bot_left, env.puppet_bot_right, reboot, current_limit, start_left_arm_pose, start_right_arm_pose)
-
     # Data collection
     ts = env.reset(fake=True)
+
     timesteps = [ts]
     actions = []
     actual_dt_history = []
@@ -160,10 +159,6 @@ def capture_one_episode(dt, max_timesteps, camera_names, dataset_dir, dataset_na
     return True
 
 
-def execute_policy(policy, master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right):
-    pass
-
-
 def main(args):
     task_config = TASK_CONFIGS[args['task_name']]
     dataset_dir = task_config['dataset_dir']
@@ -190,6 +185,9 @@ def main(args):
         dataset_name = f'episode_{episode_idx}'
         print(dataset_name + '\n')
         start_left_arm_pose, start_right_arm_pose = get_start_arm_pose(args['task_name'])
+        # move all 4 robots to a starting pose where it is easy to start teleoperation, then wait till both gripper closed
+        opening_ceremony(master_bot_left, master_bot_right, env.puppet_bot_left, env.puppet_bot_right, reboot,
+                         current_limit, start_left_arm_pose, start_right_arm_pose)
         is_healthy = capture_one_episode(DT, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
                                          master_bot_left, master_bot_right, env, reboot, current_limit, start_left_arm_pose, start_right_arm_pose)
         if is_healthy and args['episode_idx'] is not None:
