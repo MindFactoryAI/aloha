@@ -32,6 +32,9 @@ fig, [
     [left_mode_ax, right_mode_ax]
 ] = plt.subplots(4, 2, figsize=(24, 12), dpi=80)
 
+current_plot = {}
+goal_current_plot = {}
+current_limit_plot = {}
 operating_mode_plot = {}
 
 props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
@@ -55,13 +58,13 @@ right_pos_ax.legend()
 # effort plot
 puppet_right_effort_plot, = right_effort_ax.plot(qq['puppet_right'].effort, label='effort')
 puppet_right_effort_max_plot, = right_effort_ax.plot([max(qq['puppet_right'].effort)]*len(qq['puppet_right'].effort), label='max_effort')
-puppet_right_current_plot, = right_current_ax.plot(qq['puppet_right'].present_current, label='present_current')
 right_effort_ax.set_ylim(0, 1200)
 right_effort_ax.legend()
 
-# current plot
-puppet_right_goal_current_plot, = right_current_ax.plot(qq['puppet_right'].goal_current, label='goal_current')
-puppet_right_current_limit_plot, = right_current_ax.plot(qq['puppet_right'].current_limit, label='current_limit')
+# current ax
+current_plot['puppet_right'], = right_current_ax.plot(qq['puppet_right'].present_current, label='present_current')
+goal_current_plot['puppet_right'], = right_current_ax.plot(qq['puppet_right'].goal_current, label='goal_current')
+current_limit_plot['puppet_right'], = right_current_ax.plot(qq['puppet_right'].current_limit, label='current_limit')
 right_current_ax.set_ylim(-1200, 1200)
 right_current_ax.legend()
 
@@ -84,13 +87,13 @@ left_pos_ax.legend()
 # effort plot
 puppet_left_effort_plot, = left_effort_ax.plot(qq['puppet_left'].effort, label='effort')
 puppet_left_effort_max_plot, = left_effort_ax.plot([max(qq['puppet_left'].effort)]*len(qq['puppet_left'].effort), label='max_effort')
-puppet_left_current_plot, = left_current_ax.plot(qq['puppet_left'].present_current, label='present_current')
 left_effort_ax.set_ylim(0, 1200)
 left_effort_ax.legend()
 
 # current plot
-puppet_left_goal_current_plot, = left_current_ax.plot(qq['puppet_left'].goal_current, label='goal_current')
-puppet_left_current_limit_plot, = left_current_ax.plot(qq['puppet_left'].current_limit, label='current_limit')
+current_plot['puppet_left'], = left_current_ax.plot(qq['puppet_left'].present_current, label='present_current')
+goal_current_plot['puppet_left'], = left_current_ax.plot(qq['puppet_left'].goal_current, label='goal_current')
+current_limit_plot['puppet_left'], = left_current_ax.plot(qq['puppet_left'].current_limit, label='current_limit')
 left_current_ax.set_ylim(-1200, 1200)
 left_current_ax.legend()
 
@@ -137,28 +140,19 @@ def joint_states_callback(arm, args, msg):
 
 def update_plot(frame):
 
-    left_current = service_command('/puppet_left/get_motor_registers', 'single', 'gripper', 'Present_Current')
-    right_current = service_command('/puppet_right/get_motor_registers', 'single', 'gripper', 'Present_Current')
-    qq['puppet_left'].present_current.append(left_current)
-    qq['puppet_right'].present_current.append(right_current)
-    puppet_left_current_plot.set_ydata(qq['puppet_left'].present_current)
-    puppet_right_current_plot.set_ydata(qq['puppet_right'].present_current)
-
-    left_goal_current = service_command('/puppet_left/get_motor_registers', 'single', 'gripper', 'Goal_Current')
-    right_goal_current = service_command('/puppet_right/get_motor_registers', 'single', 'gripper', 'Goal_Current')
-    qq['puppet_left'].goal_current.append(left_goal_current)
-    qq['puppet_right'].goal_current.append(right_goal_current)
-    puppet_left_goal_current_plot.set_ydata(qq['puppet_left'].goal_current)
-    puppet_right_goal_current_plot.set_ydata(qq['puppet_right'].goal_current)
-
-    left_goal_current_limit = service_command('/puppet_left/get_motor_registers', 'single', 'gripper', 'Current_Limit')
-    right_goal_current_limit = service_command('/puppet_right/get_motor_registers', 'single', 'gripper', 'Current_Limit')
-    qq['puppet_left'].current_limit.append(left_goal_current_limit)
-    qq['puppet_right'].current_limit.append(right_goal_current_limit)
-    puppet_left_current_limit_plot.set_ydata(qq['puppet_left'].current_limit)
-    puppet_left_current_limit_plot.set_ydata(qq['puppet_right'].current_limit)
-
     for arm in ['puppet_left', 'puppet_right']:
+
+        current = service_command(f'/{arm}/get_motor_registers', 'single', 'gripper', 'Present_Current')
+        qq[arm].present_current.append(current)
+        current_plot[arm].set_ydata(qq[arm].present_current)
+
+        goal_current = service_command(f'/{arm}/get_motor_registers', 'single', 'gripper', 'Goal_Current')
+        qq[arm].goal_current.append(goal_current)
+        goal_current_plot[arm].set_ydata(qq[arm].goal_current)
+
+        current_limit = service_command(f'/{arm}/get_motor_registers', 'single', 'gripper', 'Current_Limit')
+        qq[arm].current_limit.append(current_limit)
+        current_limit_plot[arm].set_ydata(qq[arm].current_limit)
 
         operating_mode = service_command(f'/{arm}/get_motor_registers', 'single', 'gripper', 'Operating_Mode')
         qq[arm].operating_mode.append(operating_mode)

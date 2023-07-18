@@ -5,6 +5,8 @@ import torch
 
 from constants import DT
 from interbotix_xs_msgs.msg import JointSingleCommand
+from interbotix_xs_msgs.srv import RegisterValues
+import rospy
 
 import IPython
 e = IPython.embed
@@ -204,13 +206,40 @@ def torque_on(bot):
     bot.dxl.robot_torque_enable("single", "gripper", True)
 
 
+def gripper_torque_on(bot):
+    bot.dxl.robot_torque_enable("single", "gripper", True)
+
+
+def gripper_torque_off(bot):
+    bot.dxl.robot_torque_enable("single", "gripper", False)
+
+
+def service_command(service_path, cmd_type, name, reg, value=0):
+    rospy.wait_for_service(service_path)
+
+    try:
+        get_registers = rospy.ServiceProxy(service_path, RegisterValues)
+
+        # Make the service call
+        response = get_registers(cmd_type, name, reg, value)
+
+        # Process the response
+        if response:
+            return str(response.values)
+        else:
+            return "Failed"
+
+    except rospy.ServiceException as e:
+        print("Service call failed:", str(e))
+        return "Failed"
+
 def reboot_grippers(puppet_bot_left, puppet_bot_right, current_limit=1000):
 
     for bot in [puppet_bot_left, puppet_bot_right]:
         bot.dxl.robot_reboot_motors("single", "gripper", True)
         bot.dxl.robot_torque_enable("single", "gripper", False)
-        bot.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
         bot.dxl.robot_set_motor_registers("single", "gripper", 'Current_Limit', current_limit)
+        bot.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
         bot.dxl.robot_torque_enable("single", "gripper", True)
 
 

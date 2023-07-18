@@ -34,7 +34,7 @@ if __name__ == '__main__':
         table.add_column("Register", style="cyan", no_wrap=True)
         table.add_column("Value", style="cyan")
 
-        for register_name in ['Operating_Mode', 'Goal_Current', 'Current_Limit', 'Hardware_Error_Status']:
+        for register_name in ['Operating_Mode', 'Goal_Current', 'Current_Limit', 'Hardware_Error_Status', 'Torque_Enable']:
             value = service_command(ros_service, 'single', 'gripper', f'{register_name}')
             table.add_row(register_name, value)
 

@@ -9,15 +9,48 @@ from tqdm import tqdm
 from aloha_scripts.constants import DT, START_ARM_POSE, TASK_CONFIGS, get_start_arm_pose
 from aloha_scripts.constants import MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE, PUPPET_GRIPPER_JOINT_OPEN
 from robot_utils import Recorder, ImageRecorder, get_arm_gripper_positions
-from robot_utils import move_arms, torque_on, torque_off, move_grippers
+from robot_utils import move_arms, torque_on, torque_off, move_grippers, gripper_torque_on, gripper_torque_off
 from real_env import make_real_env, get_action
 
 
 from interbotix_xs_modules.arm import InterbotixManipulatorXS
+import numpy as np
 
 import IPython
 e = IPython.embed
 from aloha_scripts.robot_utils import reboot_arms, reboot_grippers
+
+
+def wait_for_start(master_bot_left, master_bot_right, close_thresh=0.2, human_takeover=True):
+
+    master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
+    master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
+
+    start_gripper_pos_left = get_arm_gripper_positions(master_bot_left)
+    start_gripper_pos_right = get_arm_gripper_positions(master_bot_right)
+    move_grippers([master_bot_left, master_bot_right], [start_gripper_pos_left + close_thresh, start_gripper_pos_right + close_thresh], 0.3)
+    start_gripper_pos_left = get_arm_gripper_positions(master_bot_left)
+    start_gripper_pos_right = get_arm_gripper_positions(master_bot_right)
+
+    # press gripper to start data collection
+    # disable torque for only gripper joint of master robot to allow user movement
+    master_bot_left.dxl.robot_torque_enable("single", "gripper", False)
+    master_bot_right.dxl.robot_torque_enable("single", "gripper", False)
+    print(f'Close the gripper to start')
+
+    pressed = False
+    while not pressed:
+        gripper_pos_left = get_arm_gripper_positions(master_bot_left)
+        d_left = gripper_pos_left - start_gripper_pos_left
+        gripper_pos_right = get_arm_gripper_positions(master_bot_right)
+        d_right = gripper_pos_right - start_gripper_pos_right
+        if (abs(d_left) > close_thresh) and (abs(d_right) > close_thresh):
+            pressed = True
+        time.sleep(DT/10)
+    if human_takeover:
+        torque_off(master_bot_left)
+        torque_off(master_bot_right)
+        print(f'Started!')
 
 
 def opening_ceremony(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, reboot, current_limit, start_left_arm_pose, start_right_arm_pose):
@@ -32,32 +65,14 @@ def opening_ceremony(master_bot_left, master_bot_right, puppet_bot_left, puppet_
     torque_on(master_bot_right)
 
     # move arms to starting position
-    start_arm_qpos = START_ARM_POSE[:6]
     move_arms([master_bot_left, puppet_bot_left, master_bot_right, puppet_bot_right], [start_left_arm_pose] * 2 + [start_right_arm_pose] * 2, move_time=1.5)
     # move grippers to starting position
     move_grippers([master_bot_left, puppet_bot_left, master_bot_right, puppet_bot_right], [MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE] * 2, move_time=0.5)
 
 
-    # press gripper to start data collection
-    # disable torque for only gripper joint of master robot to allow user movement
-    master_bot_left.dxl.robot_torque_enable("single", "gripper", False)
-    master_bot_right.dxl.robot_torque_enable("single", "gripper", False)
-    print(f'Close the gripper to start')
-    close_thresh = -0.3
-    pressed = False
-    while not pressed:
-        gripper_pos_left = get_arm_gripper_positions(master_bot_left)
-        gripper_pos_right = get_arm_gripper_positions(master_bot_right)
-        if (gripper_pos_left < close_thresh) and (gripper_pos_right < close_thresh):
-            pressed = True
-        time.sleep(DT/10)
-    torque_off(master_bot_left)
-    torque_off(master_bot_right)
-    print(f'Started!')
 
-
-def capture_one_episode(dt, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
-                        master_bot_left, master_bot_right, env, reboot, current_limit, start_left_arm_pose, start_right_arm_pose):
+def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
+                        master_bot_left, master_bot_right, env):
     print(f'Dataset name: {dataset_name}')
 
     # saving dataset
@@ -68,19 +83,16 @@ def capture_one_episode(dt, max_timesteps, camera_names, dataset_dir, dataset_na
         print(f'Dataset already exist at \n{dataset_path}\nHint: set overwrite to True.')
         exit()
 
-    # Data collection
-    ts = env.reset(fake=True)
-
-    timesteps = [ts]
+    timesteps = [initial_state]
     actions = []
     actual_dt_history = []
     for t in tqdm(range(max_timesteps)):
         t0 = time.time() #
         action = get_action(master_bot_left, master_bot_right)
         t1 = time.time() #
-        ts = env.step(action)
+        initial_state = env.step(action)
         t2 = time.time() #
-        timesteps.append(ts)
+        timesteps.append(initial_state)
         actions.append(action)
         actual_dt_history.append([t0, t1, t2])
 
@@ -124,14 +136,14 @@ def capture_one_episode(dt, max_timesteps, camera_names, dataset_dir, dataset_na
     # len(action): max_timesteps, len(time_steps): max_timesteps + 1
     while actions:
         action = actions.pop(0)
-        ts = timesteps.pop(0)
-        data_dict['/observations/qpos'].append(ts.observation['qpos'])
-        data_dict['/observations/qvel'].append(ts.observation['qvel'])
-        data_dict['/observations/effort'].append(ts.observation['effort'])
+        initial_state = timesteps.pop(0)
+        data_dict['/observations/qpos'].append(initial_state.observation['qpos'])
+        data_dict['/observations/qvel'].append(initial_state.observation['qvel'])
+        data_dict['/observations/effort'].append(initial_state.observation['effort'])
         data_dict['/action'].append(action)
         for cam_name in camera_names:
             # we are going to add the compressed images to the dataset
-            data_dict[f'/observations/images/{cam_name}'].append(ts.observation['images_compressed'][cam_name])
+            data_dict[f'/observations/images/{cam_name}'].append(initial_state.observation['images_compressed'][cam_name])
 
     # HDF5
     t0 = time.time()
@@ -185,11 +197,14 @@ def main(args):
         dataset_name = f'episode_{episode_idx}'
         print(dataset_name + '\n')
         start_left_arm_pose, start_right_arm_pose = get_start_arm_pose(args['task_name'])
-        # move all 4 robots to a starting pose where it is easy to start teleoperation, then wait till both gripper closed
+        # move all 4 robots to a starting pose where it is easy to start teleoperation
         opening_ceremony(master_bot_left, master_bot_right, env.puppet_bot_left, env.puppet_bot_right, reboot,
                          current_limit, start_left_arm_pose, start_right_arm_pose)
-        is_healthy = capture_one_episode(DT, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
-                                         master_bot_left, master_bot_right, env, reboot, current_limit, start_left_arm_pose, start_right_arm_pose)
+        # then wait till both gripper closed
+        wait_for_start(master_bot_left, master_bot_right)
+        ts = env.reset(fake=True)
+        is_healthy = capture_one_episode(ts, DT, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
+                                         master_bot_left, master_bot_right, env)
         if is_healthy and args['episode_idx'] is not None:
             break
         reboot = args['reboot_every_episode']
@@ -233,7 +248,7 @@ if __name__ == '__main__':
     parser.add_argument('--task_name', action='store', type=str, help='Task name.', required=True)
     parser.add_argument('--episode_idx', action='store', type=int, help='Episode index.', default=None, required=False)
     parser.add_argument('--reboot_every_episode', action='store_true', help='Episode index.', default=False, required=False)
-    parser.add_argument('--current_limit', help='Episode index.', default=500, required=False)
+    parser.add_argument('--current_limit', help='Gripper current limit.', type=int, default=300, required=False)
     main(vars(parser.parse_args()))
     # debug()
 
