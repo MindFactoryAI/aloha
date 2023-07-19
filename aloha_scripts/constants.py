@@ -195,13 +195,15 @@ TASK_CONFIGS = {
     },
     'drop_battery_in_slot_only': {
         'dataset_dir': FAST_DATA_DIR + '/drop_battery_in_slot_only',
-        'num_episodes': 30,
+        'num_episodes': 50,
         'episode_len': 350,
         'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist'],
+        'program': ['grasp_battery'],
         'start_left_arm_pose': [0.2208932340145111, -0.37889325618743896, 1.2686021327972412, 0.44025251269340515,
                                 -0.6135923266410828, -0.2178252786397934],
         'start_right_arm_pose': [-0.14726215600967407, -0.5599030256271362, 1.3023496866226196, -0.058291271328926086,
                                  -0.3436117172241211, 0.02147573232650757],
+
     },
 }
 

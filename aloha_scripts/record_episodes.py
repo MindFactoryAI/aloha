@@ -70,11 +70,8 @@ def opening_ceremony(master_bot_left, master_bot_right, puppet_bot_left, puppet_
     move_grippers([master_bot_left, puppet_bot_left, master_bot_right, puppet_bot_right], [MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE] * 2, move_time=0.5)
 
 
-
-def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
-                        master_bot_left, master_bot_right, env):
+def validate_dataset(dataset_dir, dataset_name, overwrite=False):
     print(f'Dataset name: {dataset_name}')
-
     # saving dataset
     if not os.path.isdir(dataset_dir):
         os.makedirs(dataset_dir)
@@ -82,7 +79,10 @@ def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_
     if os.path.isfile(dataset_path) and not overwrite:
         print(f'Dataset already exist at \n{dataset_path}\nHint: set overwrite to True.')
         exit()
+    return dataset_path
 
+
+def teleoperate(initial_state, max_timesteps, env, master_bot_left, master_bot_right):
     timesteps = [initial_state]
     actions = []
     actual_dt_history = []
@@ -90,26 +90,15 @@ def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_
         t0 = time.time() #
         action = get_action(master_bot_left, master_bot_right)
         t1 = time.time() #
-        initial_state = env.step(action)
+        state = env.step(action)
         t2 = time.time() #
-        timesteps.append(initial_state)
+        timesteps.append(state)
         actions.append(action)
         actual_dt_history.append([t0, t1, t2])
+    return timesteps, actions, actual_dt_history
 
-    # Torque on both master bots
-    torque_on(master_bot_left)
-    torque_on(master_bot_right)
-    # Open puppet grippers
-    env.puppet_bot_left.dxl.robot_set_operating_modes("single", "gripper", "position")
-    env.puppet_bot_right.dxl.robot_set_operating_modes("single", "gripper", "position")
-    move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)
-    env.puppet_bot_left.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
-    env.puppet_bot_right.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
 
-    freq_mean = print_dt_diagnosis(actual_dt_history)
-    if freq_mean < 42:
-        return False
-
+def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
     """
     For each timestep:
     observations
@@ -120,7 +109,7 @@ def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_
         - cam_right_wrist   (480, 640, 3) 'uint8'
     - qpos                  (14,)         'float64'
     - qvel                  (14,)         'float64'
-    
+
     action                  (14,)         'float64'
     """
 
@@ -143,13 +132,14 @@ def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_
         data_dict['/action'].append(action)
         for cam_name in camera_names:
             # we are going to add the compressed images to the dataset
-            data_dict[f'/observations/images/{cam_name}'].append(initial_state.observation['images_compressed'][cam_name])
+            data_dict[f'/observations/images/{cam_name}'].append(
+                initial_state.observation['images_compressed'][cam_name])
 
     # HDF5
     t0 = time.time()
     # import h5py_cache
     # with h5py_cache.File(dataset_path + '.hdf5', 'w', chunk_cache_mem_size=1024**2*2) as root:
-    with h5py.File(dataset_path + '.hdf5', 'w', rdcc_nbytes=1024**2*2) as root:
+    with h5py.File(dataset_path + '.hdf5', 'w', rdcc_nbytes=1024 ** 2 * 2) as root:
         root.attrs['sim'] = False
         root.attrs['episode_len'] = max_timesteps
         obs = root.create_group('observations')
@@ -169,6 +159,32 @@ def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_
     print(f'Saving: {time.time() - t0:.1f} secs')
 
     return True
+
+
+def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
+                        master_bot_left, master_bot_right, env):
+
+    dataset_path = validate_dataset(dataset_dir, dataset_name, overwrite)
+    timesteps, actions, actual_dt_history = teleoperate(initial_state, max_timesteps, env, master_bot_left, master_bot_right)
+
+    # Torque on both master bots
+    torque_on(master_bot_left)
+    torque_on(master_bot_right)
+
+    # Open puppet grippers
+    env.puppet_bot_left.dxl.robot_set_operating_modes("single", "gripper", "position")
+    env.puppet_bot_right.dxl.robot_set_operating_modes("single", "gripper", "position")
+    move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)
+    env.puppet_bot_left.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
+    env.puppet_bot_right.dxl.robot_set_operating_modes("single", "gripper", "current_based_position")
+
+    freq_mean = print_dt_diagnosis(actual_dt_history)
+    if freq_mean < 42:
+        return False
+
+    did_save = save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions)
+    return did_save
+
 
 
 def main(args):
