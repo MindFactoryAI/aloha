@@ -82,20 +82,17 @@ def validate_dataset(dataset_dir, dataset_name, overwrite=False):
     return dataset_path
 
 
-def teleoperate(initial_state, max_timesteps, env, master_bot_left, master_bot_right):
-    timesteps = [initial_state]
-    actions = []
-    actual_dt_history = []
+def teleoperate(states, actions, actual_dt_history, max_timesteps, env, master_bot_left, master_bot_right):
     for t in tqdm(range(max_timesteps)):
         t0 = time.time() #
         action = get_action(master_bot_left, master_bot_right)
+        actions.append(action)
         t1 = time.time() #
         state = env.step(action)
         t2 = time.time() #
-        timesteps.append(state)
-        actions.append(action)
+        states.append(state)
         actual_dt_history.append([t0, t1, t2])
-    return timesteps, actions, actual_dt_history
+    return states, actions, actual_dt_history
 
 
 def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
@@ -123,17 +120,19 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
         data_dict[f'/observations/images/{cam_name}'] = []
 
     # len(action): max_timesteps, len(time_steps): max_timesteps + 1
+    assert len(timesteps) == max_timesteps + 1, f"expected {max_timesteps + 1} timesteps got {len(timesteps)}"
+    assert len(actions) == max_timesteps, f"expected {max_timesteps} actions got {len(actions)}"
     while actions:
         action = actions.pop(0)
-        initial_state = timesteps.pop(0)
-        data_dict['/observations/qpos'].append(initial_state.observation['qpos'])
-        data_dict['/observations/qvel'].append(initial_state.observation['qvel'])
-        data_dict['/observations/effort'].append(initial_state.observation['effort'])
+        state = timesteps.pop(0)
+        data_dict['/observations/qpos'].append(state.observation['qpos'])
+        data_dict['/observations/qvel'].append(state.observation['qvel'])
+        data_dict['/observations/effort'].append(state.observation['effort'])
         data_dict['/action'].append(action)
         for cam_name in camera_names:
             # we are going to add the compressed images to the dataset
             data_dict[f'/observations/images/{cam_name}'].append(
-                initial_state.observation['images_compressed'][cam_name])
+                state.observation['images_compressed'][cam_name])
 
     # HDF5
     t0 = time.time()
@@ -165,7 +164,8 @@ def capture_one_episode(initial_state, dt, max_timesteps, camera_names, dataset_
                         master_bot_left, master_bot_right, env):
 
     dataset_path = validate_dataset(dataset_dir, dataset_name, overwrite)
-    timesteps, actions, actual_dt_history = teleoperate(initial_state, max_timesteps, env, master_bot_left, master_bot_right)
+    states, actions, actual_dt_history = [initial_state], [], []
+    timesteps, actions, actual_dt_history = teleoperate(states, actions, actual_dt_history, max_timesteps, env, master_bot_left, master_bot_right)
 
     # Torque on both master bots
     torque_on(master_bot_left)
