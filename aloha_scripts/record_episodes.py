@@ -8,10 +8,11 @@ from tqdm import tqdm
 
 from aloha_scripts.constants import DT, START_ARM_POSE, TASK_CONFIGS, get_start_arm_pose
 from aloha_scripts.constants import MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE, PUPPET_GRIPPER_JOINT_OPEN
+from aloha_scripts.constants import PUPPET2MASTER_JOINT_FN
 from robot_utils import Recorder, ImageRecorder, get_arm_gripper_positions
 from robot_utils import move_arms, torque_on, torque_off, move_grippers, gripper_torque_on, gripper_torque_off
 from real_env import make_real_env, get_action
-
+from math import copysign
 
 from interbotix_xs_modules.arm import InterbotixManipulatorXS
 import numpy as np
@@ -21,16 +22,12 @@ e = IPython.embed
 from aloha_scripts.robot_utils import reboot_arms, reboot_grippers
 
 
-def wait_for_start(master_bot_left, master_bot_right, close_thresh=0.2, human_takeover=True):
+def wait_for_start(env, master_bot_left, master_bot_right, close_thresh=0.2):
 
     master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
     master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
 
-    start_gripper_pos_left = get_arm_gripper_positions(master_bot_left)
-    start_gripper_pos_right = get_arm_gripper_positions(master_bot_right)
-    move_grippers([master_bot_left, master_bot_right], [start_gripper_pos_left + close_thresh, start_gripper_pos_right + close_thresh], 0.3)
-    start_gripper_pos_left = get_arm_gripper_positions(master_bot_left)
-    start_gripper_pos_right = get_arm_gripper_positions(master_bot_right)
+    move_grippers([master_bot_left, master_bot_right], [MASTER_GRIPPER_JOINT_MID, MASTER_GRIPPER_JOINT_MID], 0.2)
 
     # press gripper to start data collection
     # disable torque for only gripper joint of master robot to allow user movement
@@ -40,17 +37,22 @@ def wait_for_start(master_bot_left, master_bot_right, close_thresh=0.2, human_ta
 
     pressed = False
     while not pressed:
-        gripper_pos_left = get_arm_gripper_positions(master_bot_left)
-        d_left = gripper_pos_left - start_gripper_pos_left
-        gripper_pos_right = get_arm_gripper_positions(master_bot_right)
-        d_right = gripper_pos_right - start_gripper_pos_right
-        if (abs(d_left) > close_thresh) and (abs(d_right) > close_thresh):
+        d_left = get_arm_gripper_positions(master_bot_left) - MASTER_GRIPPER_JOINT_MID
+        d_right = get_arm_gripper_positions(master_bot_right) - MASTER_GRIPPER_JOINT_MID
+        print(d_right)
+        is_pressed = lambda x: copysign(1., x) < 0
+        left_pressed, right_pressed = is_pressed(d_left), is_pressed(d_right)
+        left_over_theshold, right_over_threshold = abs(d_left) > close_thresh, abs(d_right) > close_thresh
+        if left_pressed and left_over_theshold and right_pressed and right_over_threshold:
             pressed = True
         time.sleep(DT/10)
-    if human_takeover:
-        torque_off(master_bot_left)
-        torque_off(master_bot_right)
-        print(f'Started!')
+    master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
+    master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
+
+    master_bot_left_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_left))
+    master_bot_right_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_right))
+    move_grippers([master_bot_left, master_bot_right], [master_bot_left_pos, master_bot_right_pos], 0.2)
+    print(f'Started!')
 
 
 def opening_ceremony(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, reboot, current_limit, start_left_arm_pose, start_right_arm_pose):
@@ -83,6 +85,8 @@ def validate_dataset(dataset_dir, dataset_name, overwrite=False):
 
 
 def teleoperate(states, actions, actual_dt_history, max_timesteps, env, master_bot_left, master_bot_right):
+    torque_off(master_bot_left)
+    torque_off(master_bot_right)
     for t in tqdm(range(max_timesteps)):
         t0 = time.time() #
         action = get_action(master_bot_left, master_bot_right)
@@ -92,6 +96,8 @@ def teleoperate(states, actions, actual_dt_history, max_timesteps, env, master_b
         t2 = time.time() #
         states.append(state)
         actual_dt_history.append([t0, t1, t2])
+    torque_on(master_bot_left)
+    torque_on(master_bot_right)
     return states, actions, actual_dt_history
 
 
@@ -217,7 +223,7 @@ def main(args):
         opening_ceremony(master_bot_left, master_bot_right, env.puppet_bot_left, env.puppet_bot_right, reboot,
                          current_limit, start_left_arm_pose, start_right_arm_pose)
         # then wait till both gripper closed
-        wait_for_start(master_bot_left, master_bot_right)
+        wait_for_start(env, master_bot_left, master_bot_right)
         ts = env.reset(fake=True)
         is_healthy = capture_one_episode(ts, DT, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
                                          master_bot_left, master_bot_right, env)
