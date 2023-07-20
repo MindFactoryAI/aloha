@@ -39,7 +39,6 @@ def wait_for_start(env, master_bot_left, master_bot_right, close_thresh=0.2):
     while not pressed:
         d_left = get_arm_gripper_positions(master_bot_left) - MASTER_GRIPPER_JOINT_MID
         d_right = get_arm_gripper_positions(master_bot_right) - MASTER_GRIPPER_JOINT_MID
-        print(d_right)
         is_pressed = lambda x: copysign(1., x) < 0
         left_pressed, right_pressed = is_pressed(d_left), is_pressed(d_right)
         left_over_theshold, right_over_threshold = abs(d_left) > close_thresh, abs(d_right) > close_thresh
