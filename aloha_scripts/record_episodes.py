@@ -22,7 +22,22 @@ e = IPython.embed
 from aloha_scripts.robot_utils import reboot_arms, reboot_grippers
 
 
-def wait_for_start(env, master_bot_left, master_bot_right, close_thresh=0.2):
+def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.2, block_until="double_close"):
+    """
+    Sets the master handles to center, and waits for user to close or open the handles
+    after user presses, it will move handles to puppet grippers current position
+    master_gripper torque will remain on after this is called
+
+    note: the puppet_gripper will not be effected by this call
+
+    close_thresh: the amount the user must move the handles in joint space to trigger
+    block_until:
+        "any": will block until either handle is closed or open
+        "double": requires both handles to be in either a closed or open state
+        "double_close": requires both handles to close before proceeding
+
+    returns np.array([left_state, right_state]) where state: -1: closed, 0: middle, +1 open
+    """
 
     master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
     master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
@@ -35,30 +50,52 @@ def wait_for_start(env, master_bot_left, master_bot_right, close_thresh=0.2):
     master_bot_right.dxl.robot_torque_enable("single", "gripper", False)
     print(f'Close the gripper to start')
 
-    pressed = False
-    while not pressed:
+    # left_closed, right_closed, left_opened, right_opened = False, False, False, False
+    while True:
+
         d_left = get_arm_gripper_positions(master_bot_left) - MASTER_GRIPPER_JOINT_MID
         d_right = get_arm_gripper_positions(master_bot_right) - MASTER_GRIPPER_JOINT_MID
-        is_pressed = lambda x: copysign(1., x) < 0
-        left_pressed, right_pressed = is_pressed(d_left), is_pressed(d_right)
-        left_over_theshold, right_over_threshold = abs(d_left) > close_thresh, abs(d_right) > close_thresh
-        if left_pressed and left_over_theshold and right_pressed and right_over_threshold:
-            pressed = True
+        delta_normalized = np.array([d_left, d_right]) / close_thresh
+        handle_state = np.where(np.abs(delta_normalized) < 1., 0, np.sign(delta_normalized))
+
+        if block_until == "double_close":
+            if BOTH_CLOSED(handle_state):
+                break
+        elif block_until == "double":
+            if BOTH_CLOSED(handle_state) or BOTH_OPEN(handle_state):
+                break
+        elif block_until == "any":
+            if ANY_CLOSED_OR_OPEN(handle_state):
+                break
+        else:
+            raise Exception("wait_for_input has invalid block_until mode: valid modes are double_close, double, any")
+
         time.sleep(DT/10)
+
     master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
     master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
 
     master_bot_left_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_left))
     master_bot_right_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_right))
     move_grippers([master_bot_left, master_bot_right], [master_bot_left_pos, master_bot_right_pos], 0.2)
-    print(f'Started!')
+    print(f'Started!: left: {handle_state[0]}, right: {handle_state[1]}')
+    return handle_state
+
+
+ANY_CLOSED_OR_OPEN = lambda handle_state: np.any(handle_state != 0)
+LEFT_HANDLE_CLOSED = lambda handle_state: handle_state[0] == -1.
+RIGHT_HANDLE_CLOSED = lambda handle_state: handle_state[1] == -1.
+LEFT_HANDLE_OPEN = lambda handle_state: handle_state[0] == 1.
+RIGHT_HANDLE_OPEN = lambda handle_state: handle_state[1] == 1.
+BOTH_CLOSED = lambda handle_state: np.all(handle_state == -1.)
+BOTH_OPEN = lambda handle_state: np.all(handle_state == 1.)
 
 
 def opening_ceremony(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, reboot, current_limit, start_left_arm_pose, start_right_arm_pose):
     if reboot:
         reboot_arms(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, current_limit)
     else:  # rebooting the grippers each episode as they often operate past their current limit
-        reboot_grippers(puppet_bot_left, puppet_bot_right, current_limit)
+        reboot_grippers(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, current_limit)
 
     torque_on(puppet_bot_left)
     torque_on(master_bot_left)
@@ -222,7 +259,7 @@ def main(args):
         opening_ceremony(master_bot_left, master_bot_right, env.puppet_bot_left, env.puppet_bot_right, reboot,
                          current_limit, start_left_arm_pose, start_right_arm_pose)
         # then wait till both gripper closed
-        wait_for_start(env, master_bot_left, master_bot_right)
+        wait_for_input(env, master_bot_left, master_bot_right)
         ts = env.reset(fake=True)
         is_healthy = capture_one_episode(ts, DT, max_timesteps, camera_names, dataset_dir, dataset_name, overwrite,
                                          master_bot_left, master_bot_right, env)

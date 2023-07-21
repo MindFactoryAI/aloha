@@ -233,7 +233,11 @@ def service_command(service_path, cmd_type, name, reg, value=0):
         print("Service call failed:", str(e))
         return "Failed"
 
-def reboot_grippers(puppet_bot_left, puppet_bot_right, current_limit=1000):
+
+def reboot_grippers(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, current_limit=1000):
+
+    for bot in [master_bot_left, master_bot_right]:
+        bot.dxl.robot_reboot_motors("single", "gripper", True)
 
     for bot in [puppet_bot_left, puppet_bot_right]:
         bot.dxl.robot_reboot_motors("single", "gripper", True)
@@ -248,7 +252,7 @@ def reboot_arms(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_r
 
     # reboot gripper motors, and set operating modes for all motors
 
-    reboot_grippers(puppet_bot_left, puppet_bot_right, current_limit)
+    reboot_grippers(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, current_limit)
 
     for bot in [puppet_bot_left, puppet_bot_right]:
         bot.dxl.robot_set_operating_modes("group", "arm", "position")
