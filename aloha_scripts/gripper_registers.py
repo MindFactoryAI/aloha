@@ -28,7 +28,7 @@ def service_command(service_path, cmd_type, name, reg, value=0):
 
 if __name__ == '__main__':
 
-    for gripper in ['puppet_left', 'puppet_right']:
+    for gripper in ['puppet_left', 'puppet_right', 'master_left', 'master_right']:
         ros_service = f'/{gripper}/get_motor_registers'
         table = Table(show_header=True, header_style="bold magenta", title=f'[yellow]{ros_service}')
         table.add_column("Register", style="cyan", no_wrap=True)
