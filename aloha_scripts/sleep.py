@@ -1,5 +1,5 @@
 from interbotix_xs_modules.arm import InterbotixManipulatorXS
-from robot_utils import move_arms, torque_on
+from robot_utils import move_arms, torque_on, gripper_torque_off
 
 def main():
     puppet_bot_left = InterbotixManipulatorXS(robot_model="vx300s", group_name="arm", gripper_name="gripper", robot_name=f'puppet_left', init_node=True)
@@ -14,6 +14,8 @@ def main():
     puppet_sleep_position = (0, -1.7, 1.64, 0.12, 0.65, 0)
     master_sleep_position = (0, -1.1, 1.24, 0, -0.24, 0)
     move_arms(all_bots, [puppet_sleep_position] * 2, move_time=2)
+    gripper_torque_off(puppet_bot_left)
+    gripper_torque_off(puppet_bot_right)
 
 
 if __name__ == '__main__':
