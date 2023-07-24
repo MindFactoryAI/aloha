@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import cv2
 import h5py
 import argparse
 from pathlib import Path
@@ -12,42 +11,13 @@ import cv2
 from PIL import Image
 
 import IPython
+
+from data_utils import load_hdf5, decompress_image
+
 e = IPython.embed
 
 JOINT_NAMES = ["waist", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate"]
 STATE_NAMES = JOINT_NAMES + ["gripper"]
-
-
-def decompress_image(image_bytes):
-    image = np.frombuffer(image_bytes, np.uint8)
-    image_bgr = cv2.imdecode(image, cv2.IMREAD_COLOR)
-    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-
-
-def load_hdf5(dataset_dir, dataset_name):
-    dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
-    if not os.path.isfile(dataset_path):
-        print(f'Dataset does not exist at \n{dataset_path}\n')
-        exit()
-
-    with h5py.File(dataset_path, 'r') as root:
-        timesteps = root.attrs['episode_len']
-        is_sim = root.attrs['sim']
-        qpos = root['/observations/qpos'][()]
-        qvel = root['/observations/qvel'][()]
-        effort = root['/observations/effort'][()]
-        action = root['/action'][()]
-        image_dict = dict()
-        for cam_name in root[f'/observations/images/'].keys():
-            images = []
-            for i in range(timesteps):
-                image_bytes = root[f'/observations/images/{cam_name}/{i}.jpg'][()]
-                image_rgb = decompress_image(image_bytes)
-                images.append(image_rgb)
-            image_dict[cam_name] = images
-
-    return qpos, qvel, effort, action, image_dict
-
 
 def main(args):
     dataset_dir = args['dataset_dir']
@@ -62,7 +32,7 @@ def main(args):
         if args['first_frame']:
             dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
             with h5py.File(dataset_path, 'r') as root:
-                jpegs = [decompress_image(root[f'/observations/images/{cam_name}/{0}.jpg'][()]) for cam_name in root[f'/observations/images/'].keys()]
+                jpegs = [decompress_image(root[f'/observations/images/{cam_name}/{0}.jpg'][()], format='RGB') for cam_name in root[f'/observations/images/'].keys()]
                 panel = np.concatenate(jpegs, axis=1)
                 Image.fromarray(panel).save(f'{episode.parent}/{episode.stem}.jpg')
             continue
