@@ -2,17 +2,13 @@ import os
 import time
 import h5py
 import argparse
-import h5py_cache
-import numpy as np
 from tqdm import tqdm
 
-from aloha_scripts.constants import DT, START_ARM_POSE, TASK_CONFIGS, get_start_arm_pose
+from aloha_scripts.constants import DT, TASK_CONFIGS, get_start_arm_pose
 from aloha_scripts.constants import MASTER_GRIPPER_JOINT_MID, PUPPET_GRIPPER_JOINT_CLOSE, PUPPET_GRIPPER_JOINT_OPEN
-from aloha_scripts.constants import PUPPET2MASTER_JOINT_FN
-from robot_utils import Recorder, ImageRecorder, get_arm_gripper_positions
-from robot_utils import move_arms, torque_on, torque_off, move_grippers, gripper_torque_on, gripper_torque_off
+from robot_utils import Recorder, ImageRecorder, wait_for_input
+from robot_utils import move_arms, torque_on, torque_off, move_grippers
 from real_env import make_real_env, get_action
-from math import copysign
 
 from interbotix_xs_modules.arm import InterbotixManipulatorXS
 import numpy as np
@@ -20,76 +16,6 @@ import numpy as np
 import IPython
 e = IPython.embed
 from aloha_scripts.robot_utils import reboot_arms, reboot_grippers
-
-
-def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.2, block_until="double_close",
-                   message='Close the gripper to start'):
-    """
-    Sets the master handles to center, and waits for user to close or open the handles
-    after user presses, it will move handles to puppet grippers current position
-    master_gripper torque will remain on after this is called
-
-    note: the puppet_gripper will not be effected by this call
-
-    close_thresh: the amount the user must move the handles in joint space to trigger
-    block_until:
-        "any": will block until either handle is closed or open
-        "double": requires both handles to be in either a closed or open state
-        "double_close": requires both handles to close before proceeding
-
-    returns np.array([left_state, right_state]) where state: -1: closed, 0: middle, +1 open
-    """
-
-    master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
-    master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
-
-    move_grippers([master_bot_left, master_bot_right], [MASTER_GRIPPER_JOINT_MID, MASTER_GRIPPER_JOINT_MID], 0.2)
-
-    # press gripper to start data collection
-    # disable torque for only gripper joint of master robot to allow user movement
-    master_bot_left.dxl.robot_torque_enable("single", "gripper", False)
-    master_bot_right.dxl.robot_torque_enable("single", "gripper", False)
-    print(message)
-
-    # left_closed, right_closed, left_opened, right_opened = False, False, False, False
-    while True:
-
-        d_left = get_arm_gripper_positions(master_bot_left) - MASTER_GRIPPER_JOINT_MID
-        d_right = get_arm_gripper_positions(master_bot_right) - MASTER_GRIPPER_JOINT_MID
-        delta_normalized = np.array([d_left, d_right]) / close_thresh
-        handle_state = np.where(np.abs(delta_normalized) < 1., 0, np.sign(delta_normalized))
-
-        if block_until == "double_close":
-            if BOTH_CLOSED(handle_state):
-                break
-        elif block_until == "double":
-            if BOTH_CLOSED(handle_state) or BOTH_OPEN(handle_state):
-                break
-        elif block_until == "any":
-            if ANY_CLOSED_OR_OPEN(handle_state):
-                break
-        else:
-            raise Exception("wait_for_input has invalid block_until mode: valid modes are double_close, double, any")
-
-        time.sleep(DT/10)
-
-    master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
-    master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
-
-    master_bot_left_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_left))
-    master_bot_right_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_right))
-    move_grippers([master_bot_left, master_bot_right], [master_bot_left_pos, master_bot_right_pos], 0.2)
-    print(f'left: {handle_state[0]}, right: {handle_state[1]}')
-    return handle_state
-
-
-ANY_CLOSED_OR_OPEN = lambda handle_state: np.any(handle_state != 0)
-LEFT_HANDLE_CLOSED = lambda handle_state: handle_state[0] == -1.
-RIGHT_HANDLE_CLOSED = lambda handle_state: handle_state[1] == -1.
-LEFT_HANDLE_OPEN = lambda handle_state: handle_state[0] == 1.
-RIGHT_HANDLE_OPEN = lambda handle_state: handle_state[1] == 1.
-BOTH_CLOSED = lambda handle_state: np.all(handle_state == -1.)
-BOTH_OPEN = lambda handle_state: np.all(handle_state == 1.)
 
 
 def opening_ceremony(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, reboot, current_limit, start_left_arm_pose, start_right_arm_pose):
