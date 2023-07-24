@@ -22,7 +22,8 @@ e = IPython.embed
 from aloha_scripts.robot_utils import reboot_arms, reboot_grippers
 
 
-def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.2, block_until="double_close"):
+def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.2, block_until="double_close",
+                   message='Close the gripper to start'):
     """
     Sets the master handles to center, and waits for user to close or open the handles
     after user presses, it will move handles to puppet grippers current position
@@ -48,7 +49,7 @@ def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.2, blo
     # disable torque for only gripper joint of master robot to allow user movement
     master_bot_left.dxl.robot_torque_enable("single", "gripper", False)
     master_bot_right.dxl.robot_torque_enable("single", "gripper", False)
-    print(f'Close the gripper to start')
+    print(message)
 
     # left_closed, right_closed, left_opened, right_opened = False, False, False, False
     while True:
@@ -78,7 +79,7 @@ def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.2, blo
     master_bot_left_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_left))
     master_bot_right_pos = PUPPET2MASTER_JOINT_FN(get_arm_gripper_positions(env.puppet_bot_right))
     move_grippers([master_bot_left, master_bot_right], [master_bot_left_pos, master_bot_right_pos], 0.2)
-    print(f'Started!: left: {handle_state[0]}, right: {handle_state[1]}')
+    print(f'left: {handle_state[0]}, right: {handle_state[1]}')
     return handle_state
 
 
@@ -137,7 +138,7 @@ def teleoperate(states, actions, actual_dt_history, max_timesteps, env, master_b
     return states, actions, actual_dt_history
 
 
-def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
+def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions, terminal_state=None, result=None, policy_info=None, policy_index=None):
     """
     For each timestep:
     observations
@@ -152,6 +153,12 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
     action                  (14,)         'float64'
     """
 
+    if len(timesteps) == max_timesteps + 1 and terminal_state is None:
+        terminal_state = timesteps[-1]
+    elif terminal_state is None:
+        raise Exception('terminal state is missing, either explicity set it using terminal_state or add an extra state to the state buffer')
+    assert len(actions) == max_timesteps, f"expected {max_timesteps} actions got {len(actions)}"
+
     data_dict = {
         '/observations/qpos': [],
         '/observations/qvel': [],
@@ -161,9 +168,6 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
     for cam_name in camera_names:
         data_dict[f'/observations/images/{cam_name}'] = []
 
-    # len(action): max_timesteps, len(time_steps): max_timesteps + 1
-    assert len(timesteps) == max_timesteps + 1, f"expected {max_timesteps + 1} timesteps got {len(timesteps)}"
-    assert len(actions) == max_timesteps, f"expected {max_timesteps} actions got {len(actions)}"
     while actions:
         action = actions.pop(0)
         state = timesteps.pop(0)
@@ -171,10 +175,20 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
         data_dict['/observations/qvel'].append(state.observation['qvel'])
         data_dict['/observations/effort'].append(state.observation['effort'])
         data_dict['/action'].append(action)
+        if policy_index is not None:
+            data_dict['/policy'].append(policy_index.pop(0))
         for cam_name in camera_names:
             # we are going to add the compressed images to the dataset
             data_dict[f'/observations/images/{cam_name}'].append(
                 state.observation['images_compressed'][cam_name])
+
+    # add terminal state
+    data_dict['/observations/qpos'].append(terminal_state.observation['qpos'])
+    data_dict['/observations/qvel'].append(terminal_state.observation['qvel'])
+    data_dict['/observations/effort'].append(terminal_state.observation['effort'])
+    for cam_name in camera_names:
+        data_dict[f'/observations/images/{cam_name}'].append(
+            terminal_state.observation['images_compressed'][cam_name])
 
     # HDF5
     t0 = time.time()
@@ -183,6 +197,8 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
     with h5py.File(dataset_path + '.hdf5', 'w', rdcc_nbytes=1024 ** 2 * 2) as root:
         root.attrs['sim'] = False
         root.attrs['episode_len'] = max_timesteps
+        if result is not None:
+            root.attrs['result'] = result
         obs = root.create_group('observations')
         images = obs.create_group('images')
 
@@ -193,9 +209,19 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions):
             for fname, image in zip(filenames, image_list):
                 cam_g.create_dataset(fname, data=np.void(image))
 
-        for name in ['/observations/qpos', '/observations/qvel', '/observations/effort', '/action']:
+        for name in ['/observations/qpos', '/observations/qvel', '/observations/effort']:
+            _ = obs.create_dataset(name, (max_timesteps+1, 14))
+            root[name][...] = data_dict[name]
+
+        for name in ['/action']:
             _ = obs.create_dataset(name, (max_timesteps, 14))
             root[name][...] = data_dict[name]
+
+        if policy_info is not None:
+            root.create_dataset('policy_info', data=np.array(policy_info, dtype='S'))
+
+        if policy_index is not None:
+            root.create_dataset('policy', data=np.array(policy_index))
 
     print(f'Saving: {time.time() - t0:.1f} secs')
 

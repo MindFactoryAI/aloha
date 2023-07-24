@@ -1,7 +1,10 @@
 ### Task parameters
 
+
+CAM_NAMES = ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
 DATA_DIR = '/mnt/magneto/data/aloha_recordings'
 FAST_DATA_DIR = '/home/duane/data'
+
 TASK_CONFIGS = {
     'move_tape':{
         'dataset_dir': DATA_DIR + '/move_tape',
@@ -155,7 +158,7 @@ TASK_CONFIGS = {
     },
     'push_battery_in_slot': {
         'dataset_dir': FAST_DATA_DIR + '/push_battery_in_slot',
-        'num_episodes': 50,
+        'num_episodes': 90,
         'episode_len': 350,
         'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist'],
         'start_left_arm_pose': [0.2208932340145111, -0.37889325618743896, 1.2686021327972412, 0.44025251269340515,
@@ -198,13 +201,22 @@ TASK_CONFIGS = {
         'num_episodes': 50,
         'episode_len': 350,
         'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist'],
-        'program': ['grasp_battery'],
         'start_left_arm_pose': [0.2208932340145111, -0.37889325618743896, 1.2686021327972412, 0.44025251269340515,
                                 -0.6135923266410828, -0.2178252786397934],
         'start_right_arm_pose': [-0.14726215600967407, -0.5599030256271362, 1.3023496866226196, -0.058291271328926086,
                                  -0.3436117172241211, 0.02147573232650757],
 
     },
+    'slot_battery_long': {
+        'dataset_dir': FAST_DATA_DIR + '/slot_battery_long',
+        'num_episodes': 50,
+        'episode_len': 350,
+        'camera_names': CAM_NAMES,
+        'start_left_arm_pose': [0.2208932340145111, -0.37889325618743896, 1.2686021327972412, 0.44025251269340515,
+                                -0.6135923266410828, -0.2178252786397934],
+        'start_right_arm_pose': [-0.14726215600967407, -0.5599030256271362, 1.3023496866226196, -0.058291271328926086,
+                                 -0.3436117172241211, 0.02147573232650757],
+    }
 }
 
 
