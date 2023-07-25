@@ -4,6 +4,7 @@ import time
 import cv2
 import h5py
 import numpy as np
+from pathlib import Path
 
 
 def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions, terminal_state=None, result=None, policy_info=None, policy_index=None):
@@ -155,3 +156,33 @@ def decompress_image(image_bytes, format='BGR'):
         return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
     else:
         raise Exception(f"{format} not supported, convert from BGR to your required format")
+
+
+class Dataset:
+    def __init__(self, dataset_path):
+        self.dataset_path = dataset_path
+
+    def get_newest_episode(self):
+        files = Path(self.dataset_path).glob('*.hdf5')  # * means all if need specific format then *.csv
+        latest_file = max(list(files), key=lambda x: x.stat().st_ctime)
+        return Episode(latest_file)
+
+
+class Episode:
+    def __init__(self, episode_path):
+        self.episode_path = episode_path
+
+    def get_frame(self, index, format='BGR'):
+        with h5py.File(self.episode_path, 'r') as root:
+            cam_frames = [decompress_image(root[f'/observations/images/{cam_name}/{index}.jpg'][()], format=format) for cam_name in root[f'/observations/images/'].keys()]
+            return np.concatenate(cam_frames, axis=1)
+
+    def get_cam_names(self):
+        with h5py.File(self.episode_path, 'r') as root:
+            return [cam_name for cam_name in root[f'/observations/images/'].keys()]
+
+    def split_frame(self, frame):
+        cams = {}
+        for i, cam_name in enumerate(self.get_cam_names()):
+            cams[cam_name] = frame[:, i * 640:(i+1) * 640]
+        return cams

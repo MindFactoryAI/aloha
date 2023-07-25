@@ -158,7 +158,7 @@ TASK_CONFIGS = {
     },
     'push_battery_in_slot': {
         'dataset_dir': FAST_DATA_DIR + '/push_battery_in_slot',
-        'num_episodes': 90,
+        'num_episodes': 54,
         'episode_len': 350,
         'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist'],
         'start_left_arm_pose': [0.2208932340145111, -0.37889325618743896, 1.2686021327972412, 0.44025251269340515,
