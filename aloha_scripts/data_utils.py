@@ -172,10 +172,21 @@ class Episode:
     def __init__(self, episode_path):
         self.episode_path = episode_path
 
-    def get_frame(self, index, format='BGR'):
+    def get_initial_frame(self, format='BGR', return_type='image'):
+        return self.get_frame(0, format, return_type)
+
+    def get_terminal_frame(self, format='BGR', return_type='image'):
+        return self.get_frame(len(self)-1, format, return_type) # todo: this doens't return the exact terminal frame
+
+    def get_frame(self, index, format='BGR', return_type='image'):
+        cam_frames = {}
         with h5py.File(self.episode_path, 'r') as root:
-            cam_frames = [decompress_image(root[f'/observations/images/{cam_name}/{index}.jpg'][()], format=format) for cam_name in root[f'/observations/images/'].keys()]
-            return np.concatenate(cam_frames, axis=1)
+            for cam_name in root[f'/observations/images/'].keys():
+                cam_frames[cam_name] = decompress_image(root[f'/observations/images/{cam_name}/{index}.jpg'][()], format=format)
+            if return_type == 'dict':
+                return cam_frames
+            else:
+                return np.concatenate(list(cam_frames.values()), axis=1)
 
     def get_cam_names(self):
         with h5py.File(self.episode_path, 'r') as root:
@@ -186,3 +197,7 @@ class Episode:
         for i, cam_name in enumerate(self.get_cam_names()):
             cams[cam_name] = frame[:, i * 640:(i+1) * 640]
         return cams
+
+    def __len__(self):
+        with h5py.File(self.episode_path, 'r') as root:
+            return root.attrs['episode_len']

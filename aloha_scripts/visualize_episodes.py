@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from constants import DT
 import cv2
 from PIL import Image
+from data_utils import Episode
 
 import IPython
 
@@ -30,11 +31,12 @@ def main(args):
     for episode in tqdm(episodes):
         dataset_name = episode.stem
         if args['first_frame']:
-            dataset_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
-            with h5py.File(dataset_path, 'r') as root:
-                jpegs = [decompress_image(root[f'/observations/images/{cam_name}/{0}.jpg'][()], format='RGB') for cam_name in root[f'/observations/images/'].keys()]
-                panel = np.concatenate(jpegs, axis=1)
-                Image.fromarray(panel).save(f'{episode.parent}/{episode.stem}.jpg')
+            episode_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
+            episode_data = Episode(episode_path)
+            first_frame = episode_data.get_initial_frame("RGB")
+            last_frame = episode_data.get_terminal_frame("RGB")
+            panel = np.concatenate([first_frame, last_frame], axis=0)
+            Image.fromarray(panel).save(f'{episode.parent}/{episode.stem}.jpg')
             continue
 
         if (Path(dataset_dir)/Path(episode.stem + '_video.mp4')).exists():
