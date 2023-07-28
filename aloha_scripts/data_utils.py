@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 
 
-def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions, terminal_state=None, result=None, policy_info=None, policy_index=None):
+def save_episode(dataset_path, policy_guid, camera_names, max_timesteps, timesteps, actions, terminal_state=None, result=None, policy_info=None, policy_index=None):
     """
     For each timestep:
     observations
@@ -20,6 +20,8 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions, 
     - qvel                  (14,)         'float64'
 
     action                  (14,)         'float64'
+
+    policy_guid: the guid of the policy that created this episode, "human" if human
     """
 
     if len(timesteps) == max_timesteps + 1 and terminal_state is None:
@@ -64,6 +66,7 @@ def save_episode(dataset_path, camera_names, max_timesteps, timesteps, actions, 
     # import h5py_cache
     # with h5py_cache.File(dataset_path + '.hdf5', 'w', chunk_cache_mem_size=1024**2*2) as root:
     with h5py.File(dataset_path + '.hdf5', 'w', rdcc_nbytes=1024 ** 2 * 2) as root:
+        root.attrs['policy_guid'] = policy_guid
         root.attrs['sim'] = False
         root.attrs['episode_len'] = max_timesteps
         if result is not None:
