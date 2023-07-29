@@ -13,7 +13,7 @@ if __name__ == '__main__':
     hdf5_files.sort(key=lambda x: os.path.getmtime(x))
 
     for i, file in enumerate(hdf5_files):
-        for ext in ['.hdf5', '_video.mp4', '_qpos.png', '_error.png', '_effort.png']:
+        for ext in ['.hdf5', '_video.mp4', '_qpos.png', '_error.png', '_effort.png', '.jpg']:
             related_file = Path(str(file.parent / file.stem) + ext)
             if related_file.exists():
                 os.rename(str(related_file), f'{str(file.parent)}/episode_{i}{ext}')
