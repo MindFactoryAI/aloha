@@ -1,7 +1,8 @@
 import numpy as np
 import time
-
-import torch
+import sys
+import termios
+import tty
 
 from aloha_scripts.constants import DT, MASTER_GRIPPER_JOINT_MID, PUPPET2MASTER_JOINT_FN
 from interbotix_xs_msgs.msg import JointSingleCommand
@@ -9,6 +10,7 @@ from interbotix_xs_msgs.srv import RegisterValues
 import rospy
 
 import IPython
+
 e = IPython.embed
 
 
@@ -81,6 +83,7 @@ class ImageRecorder:
             l = np.array(l)
             diff = l[1:] - l[:-1]
             return np.mean(diff)
+
         for cam_name in self.camera_names:
             image_freq = 1 / dt_helper(getattr(self, f'{cam_name}_timestamps'))
             print(f'{cam_name} {image_freq=:.2f}')
@@ -156,7 +159,8 @@ def get_arm_gripper_positions(bot):
 def move_arms(bot_list, target_pose_list, move_time=1):
     num_steps = int(move_time / DT)
     curr_pose_list = [get_arm_joint_positions(bot) for bot in bot_list]
-    traj_list = [np.linspace(curr_pose, target_pose, num_steps) for curr_pose, target_pose in zip(curr_pose_list, target_pose_list)]
+    traj_list = [np.linspace(curr_pose, target_pose, num_steps) for curr_pose, target_pose in
+                 zip(curr_pose_list, target_pose_list)]
     for t in range(num_steps):
         for bot_id, bot in enumerate(bot_list):
             bot.arm.set_joint_positions(traj_list[bot_id][t], blocking=False)
@@ -167,7 +171,8 @@ def move_grippers(bot_list, target_pose_list, move_time):
     gripper_command = JointSingleCommand(name="gripper")
     num_steps = int(move_time / DT)
     curr_pose_list = [get_arm_gripper_positions(bot) for bot in bot_list]
-    traj_list = [np.linspace(curr_pose, target_pose, num_steps) for curr_pose, target_pose in zip(curr_pose_list, target_pose_list)]
+    traj_list = [np.linspace(curr_pose, target_pose, num_steps) for curr_pose, target_pose in
+                 zip(curr_pose_list, target_pose_list)]
     for t in range(num_steps):
         for bot_id, bot in enumerate(bot_list):
             gripper_command.cmd = traj_list[bot_id][t]
@@ -197,9 +202,11 @@ def set_low_pid_gains(bot):
     bot.dxl.robot_set_motor_registers("group", "arm", 'Position_P_Gain', 100)
     bot.dxl.robot_set_motor_registers("group", "arm", 'Position_I_Gain', 0)
 
+
 def torque_off(bot):
     bot.dxl.robot_torque_enable("group", "arm", False)
     bot.dxl.robot_torque_enable("single", "gripper", False)
+
 
 def torque_on(bot):
     bot.dxl.robot_torque_enable("group", "arm", True)
@@ -235,7 +242,6 @@ def service_command(service_path, cmd_type, name, reg, value=0):
 
 
 def reboot_grippers(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_right, current_limit=1000):
-
     for bot in [master_bot_left, master_bot_right]:
         bot.dxl.robot_reboot_motors("single", "gripper", True)
 
@@ -260,6 +266,20 @@ def reboot_arms(master_bot_left, master_bot_right, puppet_bot_left, puppet_bot_r
     for bot in [master_bot_left, master_bot_right]:
         bot.dxl.robot_set_operating_modes("group", "arm", "position")
         bot.dxl.robot_set_operating_modes("single", "gripper", "position")
+
+
+def getch():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        char = sys.stdin.read(1)
+        if char == '\x1b':
+            # If the first character is an escape sequence, read more characters
+            char += sys.stdin.read(2)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return char
 
 
 def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.25, block_until="double_close",
@@ -291,6 +311,11 @@ def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.25, bl
     master_bot_right.dxl.robot_torque_enable("single", "gripper", False)
     print(message)
 
+    if block_until == 'keyboard':
+        ch = getch()
+        print(ch)
+        return ch
+
     # left_closed, right_closed, left_opened, right_opened = False, False, False, False
     while True:
 
@@ -311,7 +336,7 @@ def wait_for_input(env, master_bot_left, master_bot_right, close_thresh=0.25, bl
         else:
             raise Exception("wait_for_input has invalid block_until mode: valid modes are double_close, double, any")
 
-        time.sleep(DT/10)
+        time.sleep(DT / 10)
 
     master_bot_left.dxl.robot_torque_enable("single", "gripper", True)
     master_bot_right.dxl.robot_torque_enable("single", "gripper", True)
@@ -330,3 +355,4 @@ LEFT_HANDLE_OPEN = lambda handle_state: handle_state[0] == 1.
 RIGHT_HANDLE_OPEN = lambda handle_state: handle_state[1] == 1.
 BOTH_CLOSED = lambda handle_state: np.all(handle_state == -1.)
 BOTH_OPEN = lambda handle_state: np.all(handle_state == 1.)
+

@@ -39,6 +39,12 @@ def main(args):
             Image.fromarray(panel).save(f'{episode.parent}/{episode.stem}.jpg')
             continue
 
+        if args['stats']:
+            episode_path = os.path.join(dataset_dir, dataset_name + '.hdf5')
+            episode_data = Episode(episode_path)
+            print(episode_path, len(episode_data))
+            continue
+
         if (Path(dataset_dir)/Path(episode.stem + '_video.mp4')).exists():
             print(f'already done {str(episode)}')
         else:
@@ -182,4 +188,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_dir', action='store', type=str, help='Dataset dir.', required=True)
     parser.add_argument('--episode_idx', action='store', type=int, help='Episode index.', required=False)
     parser.add_argument('--first-frame', action='store_true', default=False)
+    parser.add_argument('--stats', action='store_true', default=False)
+    # parser.add_argument('--force', action='store_true', default=False, help='overwites old files')
+
     main(vars(parser.parse_args()))

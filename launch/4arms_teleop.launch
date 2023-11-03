@@ -100,8 +100,8 @@
     <param name="pixel_format" value="mjpeg" />
     <param name="camera_frame_id" value="usb_cam" />
     <param name="io_method" value="mmap"/>
-    <param name="autofocus" value="false"/>
-    <param name="focus" value="5"/>
+    <param name="focus_automatic_continuous" value="0"/>
+    <param name="focus_absolute" value="5"/>
     <param name="autoexposure" value="true"/>
   </node>
 
@@ -113,8 +113,8 @@
     <param name="pixel_format" value="mjpeg" />
     <param name="camera_frame_id" value="usb_cam" />
     <param name="io_method" value="mmap"/>
-    <param name="autofocus" value="false"/>
-    <param name="focus" value="35"/>
+    <param name="focus_automatic_continuous" value="0"/>
+    <param name="focus_absolute" value="35"/>
     <param name="autoexposure" value="true"/>
   </node>
 
@@ -126,7 +126,7 @@
     <param name="pixel_format" value="mjpeg" />
     <param name="camera_frame_id" value="usb_cam" />
     <param name="io_method" value="mmap"/>
-    <param name="autofocus" value="false"/>
+    <param name="focus_automatic_continuous" value="false"/>
     <param name="focus" value="40"/>
     <param name="autoexposure" value="true"/>
   </node>
@@ -139,8 +139,8 @@
     <param name="pixel_format" value="mjpeg" />
     <param name="camera_frame_id" value="usb_cam" />
     <param name="io_method" value="mmap"/>
-    <param name="autofocus" value="false"/>
-    <param name="focus" value="40"/>
+    <param name="focus_automatic_continuous" value="false"/>
+    <param name="focus_absolute" value="40"/>
     <param name="autoexposure" value="true"/>
   </node>
 

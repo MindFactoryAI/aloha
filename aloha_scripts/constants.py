@@ -5,6 +5,8 @@ CAM_NAMES = ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist']
 DATA_DIR = '/mnt/magneto/data/aloha_recordings'
 FAST_DATA_DIR = '/home/duane/data'
 
+START_LEFT_ARM_POSE = [0, -0.96, 1.16, 0, -0.3, 0]
+
 TASK_CONFIGS = {
     'move_tape':{
         'dataset_dir': DATA_DIR + '/move_tape',
@@ -188,7 +190,7 @@ TASK_CONFIGS = {
     },
     'grasp_battery': {
         'dataset_dir': FAST_DATA_DIR + '/grasp_battery',
-        'num_episodes': 224,
+        'num_episodes': 372,
         'episode_len': 200,
         'camera_names': ['cam_high', 'cam_low', 'cam_left_wrist', 'cam_right_wrist'],
         'start_left_arm_pose': [0.2208932340145111, -0.37889325618743896, 1.2686021327972412, 0.44025251269340515,
@@ -216,7 +218,34 @@ TASK_CONFIGS = {
                                 -0.6135923266410828, -0.2178252786397934],
         'start_right_arm_pose': [-0.14726215600967407, -0.5599030256271362, 1.3023496866226196, -0.058291271328926086,
                                  -0.3436117172241211, 0.02147573232650757],
+    },
+    'slot_battery_novar': {
+        'dataset_dir': FAST_DATA_DIR + '/slot_battery_novar',
+        'num_episodes': 50,
+        'episode_len': 800,
+        'camera_names': CAM_NAMES,
+        'start_left_arm_pose': [0.2208932340145111, -0.37889325618743896, 1.2686021327972412, 0.44025251269340515,
+                                -0.6135923266410828, -0.2178252786397934],
+        'start_right_arm_pose': [-0.14726215600967407, -0.5599030256271362, 1.3023496866226196, -0.058291271328926086,
+                                 -0.3436117172241211, 0.02147573232650757],
+    },
+    'plug_cable_novar': {
+        'dataset_dir': FAST_DATA_DIR + '/plug_cable_novar',
+        'num_episodes': 99,
+        'episode_len': 1000,
+        'camera_names': CAM_NAMES,
+        'start_left_arm_pose': [0.7900001406669617, 0.2791845202445984, 0.06749515980482101, -0.03681553900241852, 0.9249904155731201, 1.7840197086334229],
+        'start_right_arm_pose': [-0.13499031960964203, 0.30066025257110596, 1.0339031219482422, -0.19788353145122528, -0.9449321627616882, 0.03681553900241852],
+    },
+    'pack_kit_novar': {
+        'dataset_dir': FAST_DATA_DIR + '/pack_kit_novar',
+        'num_episodes': 50,
+        'episode_len': 700,
+        'camera_names': CAM_NAMES,
+        'start_left_arm_pose': [0.07056311517953873, -0.6381360292434692, 1.2762720584869385, -0.14726215600967407, -0.12118448317050934, 0.07669904083013535],
+        'start_right_arm_pose': [-0.05675728991627693, -0.16566993296146393, 1.0860583782196045, -0.14879614114761353, -0.1564660519361496, 0.16413594782352448],
     }
+
 }
 
 

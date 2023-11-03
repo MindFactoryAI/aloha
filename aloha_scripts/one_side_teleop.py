@@ -64,7 +64,7 @@ def teleop(robot_side):
     while True:
         # sync joint positions
         master_state_joints = master_bot.dxl.joint_states.position[:6]
-        # print(master_bot.dxl.joint_states.position[:6])
+        print(master_bot.dxl.joint_states.position[:6])
         puppet_bot.arm.set_joint_positions(master_state_joints, blocking=False)
         # sync gripper positions
         master_gripper_joint = master_bot.dxl.joint_states.position[6]
